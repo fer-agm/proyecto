@@ -1,18 +1,9 @@
-'''
-Revisar problema (posible) de validacion de stock y existencia
-'''
-
-
-
-
-
-
 # # # 1. Mantención de Maestros.        
 
 pacientes = {}
 farmacos = {}
 insumos = {}
-productos = {}
+product_fabric= {}
 prestaciones = {}
 proveedores = {}
 
@@ -34,7 +25,7 @@ def crear_maestro(maestro,codigo,descripcion):
                 case _:
                     print("No es una opcion valida")
     else:
-        print(f"El codigo {codigo} para el maestro {maestro} ya existe")
+        print(f"El codigo {codigo} para el maestro especifico ya existe")
 
 def mod_maestro(maestro,codigo,descripcion_nueva):
     ok=True
@@ -54,7 +45,7 @@ def mod_maestro(maestro,codigo,descripcion_nueva):
                 case _:
                     print("No es una opcion valida")
     else:
-        print(f"El codigo {codigo} para el maestro {maestro} no existe")
+        print(f"El codigo {codigo} para el maestro especifico no existe")
 
 def bloq_maestro(maestro,codigo):
     ok=True
@@ -74,7 +65,7 @@ def bloq_maestro(maestro,codigo):
                 case _:
                     print("No es una opcion valida")
     else:
-        print(f"El codigo {codigo} para el maestro {maestro} no existe")
+        print(f"El codigo {codigo} para el maestro especifico no existe")
 
 
 
@@ -84,7 +75,7 @@ inventario_insu = {}
 
 def pedido(maestro, producto, cantidad, inventario):
     if producto not in maestro or not maestro[producto]["activo"]:
-        print(f"El codigo {producto} para el maestro {maestro} no existe o esta bloqueado")
+        print(f"El codigo {producto} para el maestro especifico no existe o esta bloqueado")
         return
     
     else:
@@ -93,7 +84,7 @@ def pedido(maestro, producto, cantidad, inventario):
 
 def entrega(maestro, producto, cantidad, costo, inventario, costos):
     if producto not in maestro or not maestro[producto]["activo"]:
-        print(f"El codigo {producto} para el maestro {maestro} no existe o esta bloqueado\nNo se acepta entregas de productos no registrados anteriormente en el sistema")
+        print(f"El codigo {producto} para el maestro especifico no existe o esta bloqueado\nNo se acepta entregas de productos no registrados o bloqueados anteriormente en el sistema")
         print("Cancelando accion...")
         return
     
@@ -116,6 +107,7 @@ def entrega(maestro, producto, cantidad, costo, inventario, costos):
         ok = True
 
         while ok:
+            print(f"Cantidad minima establecida actualmente para {producto}: {inventario[producto]["minimo"]} unidades")
             op = input("Desea actualizar la cantidad minima para reposicion? (si/no): ").lower()
 
             match op:
@@ -131,7 +123,7 @@ def entrega(maestro, producto, cantidad, costo, inventario, costos):
                             ok=False
         
                     case "no":
-                        print("Cancelando accion...")
+                        print("Se mantiene la cantidad mínima actual")
                         ok=False
                         
                     case _:
@@ -146,7 +138,7 @@ def reporte_inv(inventario):
     for producto, cantidad in inventario.items():
         print(f"{producto}: {cantidad}")
 
-def reporte_compra(inventario, maestro):  ###DETALLE TESTEAR
+def reporte_compra(inventario, maestro):
     print(" ")
     if len(inventario)==0:
         print("No hay farmacos/insumos medicos registrados...")
@@ -160,7 +152,7 @@ def reporte_compra(inventario, maestro):  ###DETALLE TESTEAR
 
 
 # # # 3. Producción.
-composicion = {}
+composiciones = {}
 stock_prod_terminados = {}
 costo_farm = {}
 costo_insu = {}
@@ -168,26 +160,93 @@ costo_prod_terminados = {}
 
 
 def crear_composicion(prod_terminado,componentes):
-    composicion[prod_terminado] = componentes
+    if prod_terminado not in product_fabric or not product_fabric[prod_terminado]["activo"]:
+        print(f"El codigo {prod_terminado} para el maestro productos terminados no existe o esta bloqueado\nNo se puede crear composicion de productos no registrados o bloqueados anteriormente en el sistema")
+        return
+    
+    composicion = []
+
+    for componente in componentes:
+        codigo = componente["codigo"]
+        cantidad = componente["cantidad"]
+
+        if codigo in farmacos and farmacos[codigo]["activo"]:
+            composicion.append({"codigo": codigo, "cantidad": cantidad})
+
+        elif codigo in insumos and insumos[codigo]["activo"]:
+            composicion.append({"codigo": codigo, "cantidad": cantidad})
+
+        else:
+            print(f"Código de producto {codigo} no existe o esta bloqueado")
+            return
+    
+    composiciones[prod_terminado] = composicion
+    print(f"Composición creada para {prod_terminado} exitosamente")
 
 def orden_prod(prod_terminado,cantidad):
-    return{f"producto":prod_terminado,"cantidad":cantidad}
+    if prod_terminado not in product_fabric or not product_fabric[prod_terminado]["activo"]:
+        print(f"El codigo {prod_terminado} para el maestro productos terminados no existe o esta bloqueado\nNo se puede fabricar productos no registrados o bloqueados anteriormente en el sistema")
+        return
+    
+    if prod_terminado not in composiciones:
+        print(f"No existe composicion para el producto: {prod_terminado}\nPrimero debe crear la composicion para el producto")
+        return
+    
+    if cantidad <= 0:
+        print("La cantidad debe ser mayor a cero")
+        return
+
+    print("Orden creada exitosamente\nOrden en proceso de fabricacion...")
+    return {f"producto":prod_terminado,"cantidad":cantidad}
 
 def fabricar(orden):
     prod = orden["producto"]
     cant = orden["cantidad"]
-    if prod in composicion:
-        for comp, cant_comp in composicion[prod].items():
-            if comp in inventario_farm:
-                inventario_farm[comp] -= cant_comp*cant
-            elif comp in inventario_insu:
-                inventario_insu[comp] -= cant_comp*cant
+    receta = composiciones[prod]
 
-        stock_prod_terminados[prod] = stock_prod_terminados.get(prod,0) + cant
+    for item in receta:                                    #Verificacion de stock suficiente
+        codigo = item["codigo"]
+        requerido = item["cantidad"] * cant
+        disponible = (inventario_farm.get(codigo, {}).get("cantidad", 0) if codigo in farmacos else inventario_insu.get(codigo, {}).get("cantidad", 0))
 
-def reporte_stock_prod_terminados():
+        if disponible < requerido:
+            print(f"Stock insuficiente para {codigo}. Falta {requerido - disponible}.")
+            return
+        
+    for item in receta:                                     #Descuento de materiales
+        codigo = item["codigo"]
+        requerido = item["cantidad"] * cant
+        if codigo in farmacos:
+            inventario_farm[codigo]["cantidad"] -= requerido
+
+        else:
+            inventario_insu[codigo]["cantidad"] -= requerido
+
+    if prod not in stock_prod_terminados:                   #Aumento de la cantidad de producto terminado (si no existe se crea con cant inicial 0)
+        stock_prod_terminados[prod] = {"cantidad": 0}
+    stock_prod_terminados[prod]["cantidad"] += cant
+
+    ok=True
+    while ok:                                               #Costo unitario del producto terminado guardado en "costo_prod_terminados"
+        try:
+            costo = float(input(f"Ingrese el costo unitario del producto fabricado {prod}: $"))
+            if costo <= 0:
+                print("El costo debe ser mayor a cero.")
+            else:
+                costo_prod_terminados[prod] = costo
+                print("Costo añadido con exito...")
+                ok = False
+        
+        except ValueError:
+            print("Ingrese un número válido.")
+
+def reporte_stock_prod_terminados(inventario):
+    if len(inventario)==0:
+        print("No hay productos terminados registrados...")
+        return
+    
     print("Productos terminados:")
-    for prod, cant in stock_prod_terminados.items():
+    for prod, cant in inventario.items():
         print(f"{prod}: {cant}")
 
 
@@ -197,17 +256,20 @@ def reporte_stock_prod_terminados():
 episodios = []
 costo_prest = []
 
-def crear_ep(fecha,paciente):
-    episodio = {"fecha":fecha,"paciente":paciente,"items":[]}
+def crear_ep(fecha,paciente,codigo):
+    if paciente not in pacientes or not pacientes[paciente]["activo"]:
+        print(f"El codigo {paciente} para el maestro pacientes no existe o esta bloqueado\nNo es posible crear episodio a pacientes no registrados o bloqueados anteriormente en el sistema")
+        return
+    
+    episodio = {"codigo":codigo, "fecha":fecha, "paciente":paciente, "items":[]}
     episodios.append(episodio)
+    print("Episodio creado exitosamente...")
     return episodio
-
 
 def asignar_atencion(episodio,tipo,codigo,cantidad,costo_unitario):
     episodio["items"].append({"tipo":tipo,"codigo":codigo,"cantidad":cantidad,"costo_unitario":costo_unitario})
 
-
-def calc_precio_att(episodio):              ###DETALLE? Debo revisar el calculo de precio
+def calc_precio_att(episodio):              
     costo_total = 0
     venta_total = 0
 
@@ -227,7 +289,6 @@ def calc_precio_att(episodio):              ###DETALLE? Debo revisar el calculo 
 
     return costo_total,venta_total,venta_total-costo_total
     
-
 def reporte_vent(since,until):
     for ep in episodios:
         if since <= ep["fecha"] <= until:
@@ -328,7 +389,7 @@ def menu_mant():
                         print("Opción inválida.")
 
             case "4": # producto
-                maestro=productos
+                maestro=product_fabric
 
                 que=input("\n1. Crear\n2. Modificar.\n3. Bloquear.\n4. Volver\n")
                 match que:
@@ -421,7 +482,7 @@ def menu_inventario():
 
         match que:
             case "1":
-                codigo = input("Ingrese el codigo del producto: ")
+                codigo = input("Ingrese el codigo del producto: ").upper()
                 cantidad = int(input("Ingrese cantidad a pedir: "))
                 tipo = input("\n1. Fármaco.\n2. Insumo. \n")
 
@@ -431,13 +492,13 @@ def menu_inventario():
 
                 elif tipo == "2":
                     maestro=insumos
-                    pedido(codigo, cantidad, inventario_insu)
+                    pedido(maestro, codigo, cantidad, inventario_insu)
 
                 else:
                     print("Opción inválida.")
 
             case "2":
-                codigo = input("Ingrese código de producto: ")
+                codigo = input("Ingrese código de producto: ").upper()
                 cantidad = int(input("Ingrese cantidad de productos: "))
                 costo = float(input("Costo unitario: $"))
                 tipo = input("\n1. Fármaco.\n2. Insumo. ")
@@ -474,47 +535,56 @@ def menu_inventario():
 
 
 
-def menu_produccion():                      ###DETALLES QUE DEBO CORREGIR variable "componentes"
+def menu_produccion():
     seguir=True
     continuar = True
     while seguir:
-        que=input("\n1. Crear compoisición producto terminado.\n2. Crear oden y fabricar.\n3. Reporte stock productos terminados.\n4. Volver.\n")
+        que=input("\n1. Crear compoisición producto terminado.\n2. Crear orden de producción y fabricación.\n3. Reporte stock productos terminados.\n4. Volver.\n")
         
         match que:
             case "1":
-                componentes = {}
-                prod = input("Código producto terminado: ")
-                print("Ingrese código y cantidad, o 'fin' para terminar.")
+                componentes = []
+                prod = input("Ingrese el código del producto terminado: ").upper()
+                print("Ingrese código del farmaco/insumo a utilizar y cantidad, o 'fin' para terminar...")
                 continuar = True
+
                 while continuar:
-                    comp=input("Ingrese código del componente: ")
+                    comp=input("Ingrese código del componente (farmaco/insumo): ").upper()
                     if comp.lower()=="fin":
                         continuar = False
-                    
+                        continue
                     try:
-                        cant = float(input("Cantidad: "))
+                        cant = float(input("Ingrese la cantidad: "))
+                        if cant <= 0:
+                            print("La cantidad debe ser mayor a 0.")
+                            continue
+
                         if cant==int(cant):
                             cant=int(cant)
+
                     except ValueError:
                         print("Cantidad inválida.")
                         continue
-                    componentes[comp]=cant
+                    
+                    componentes.append({"codigo": comp, "cantidad": cant})
                 crear_composicion(prod,componentes)
-                print("Composición creada")
 
             case "2":
-                prod=input("Código producto terminado: ")
+                
+                prod = input("Ingrese código de producto terminado: ").upper()
                 try:
-                    cant=int(input("Cantidad de fabricar: "))
+                    cant = int(input("Cantidad de fabricar: "))
+
                 except ValueError:
                     print("Cantidad inválida.")
                     continue
+                
                 orden = orden_prod(prod,cant)
                 fabricar(orden)
                 print("Fabricación realizada.")
 
             case "3":
-                reporte_stock_prod_terminados()
+                reporte_stock_prod_terminados(stock_prod_terminados)
             case "4":
                 pass
             case _:
@@ -529,13 +599,11 @@ def menu_ventas():
 
         match que:
             case "1":
+                codigo = input("Ingrese el codigo de episodio: ")
                 fecha = input("Ingrese fecha respetando el formato (AAAA-MM-DD): ")
-                paciente = input("Ingrese código del paciente: ")
-                if paciente in pacientes:
-                    crear_ep(fecha,paciente)
-                    print("Episodio creado.")
-                else:
-                    print("Paciente no existe.")
+                paciente = input("Ingrese código del paciente: ").upper()
+                crear_ep(fecha,paciente,codigo)
+
             case "2":
                 if not episodios:
                     print("No hay episodios creados.")
@@ -552,15 +620,16 @@ def menu_ventas():
 
                         ep = episodios[num_i]
                         tipo=input("Tipo (producto_terminado/farmaco/insumo/prestacion): ").lower()
-                        codigo = input("Código: ")
+                        codigo = input("Código: ").upper()
                         try:
                             cantidad=int(input("Cantidad: "))
-                            costo_unidad = float(input("Costo x unidad: "))
+                            costo_unidad = float(input("Costo x unidad: $"))
                         except ValueError:
                             print("Cantidad o costo inválidos.")
                             continue
                         asignar_atencion(ep,tipo,codigo,cantidad,costo_unidad)
                         print("Atención asignada.")
+
             case "3":
                 if not episodios:
                     print("No hay episodios creados.")
@@ -568,8 +637,8 @@ def menu_ventas():
                 for i,ep in enumerate(episodios):
                     print(f"{i+1}. Fecha: {ep['fecha']}. Paciente: {ep['paciente']}")
                     try:
-                        num_i = int(input("Seleccione episodio (número)"))-1
-                        if num_i<0 or num_i>len(episodios):             ###ERROR "num_i>len(episodios)", testear y cambiar de ser necesario
+                        num_i = int(input("Seleccione episodio (número): "))-1
+                        if num_i<0 or num_i>=len(episodios):            
                             print("Índice inválido.")
                             continue
                     except ValueError:
@@ -578,10 +647,12 @@ def menu_ventas():
                     ep=episodios[num_i]
                     costo,venta,margen = calc_precio_att(ep)
                     print(f"Costo total: {costo:.1f}.\nVenta total: {venta:.1f}.\nMargen: {margen:.1f}\n")
+
             case "4":
                 since=input("Fecha desde (AAAA-MM-DD): ").strip()
                 until = input("Fecha hasta (AAAA-MM-DD); ").strip()
                 reporte_vent(since,until)
+
             case "5":
                 seguir = False
 
